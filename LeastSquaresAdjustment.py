@@ -182,13 +182,24 @@ def adjust_network(network, max_iterations=1):
         N = np.linalg.inv(A.T @ P @ A)
         Delta = -N @ A.T @ P @ L
 
-        for station, orientation_update in zip(network.directed_stations, Delta[network.n_unknown_coordinates:]):
+        for n, data  in enumerate(zip(network.directed_stations, Delta[network.n_unknown_coordinates:])):
+            station, orientation_update = data
+
             station.orientation += orientation_update / RHO
+            station.orientation_variance = N[network.n_unknown_stations+n, network.n_unknown_stations+n] / RHO
+            station.orientation_std = np.sqrt(station.orientation_variance)
 
         up = Delta[:network.n_unknown_coordinates].reshape((network.n_unknown_stations, 2))
-        for shift, station in zip(up, network.unknown_stations):
+        for n, data  in enumerate(zip(up, network.unknown_stations)):
+            shift, station = data
+
             new_station_coordinates = station.coordinates + shift
             station.update_coordinates(new_station_coordinates)
+            station.coordinate_variance = np.array([N[(n*2), (n*2)], N[(n*2)+1, (n*2)+1]])
+            station.coordinate_covariance = N[(n*2)+1, (n*2)]
+            station.coordinate_std = np.sqrt(station.coordinate_variance)
+            station.determine_error_ellipse()
+
 
         vhat = A @ Delta + L
         vhat[network.n_distance_obs:] /= RHO

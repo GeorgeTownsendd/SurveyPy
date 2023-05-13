@@ -99,6 +99,13 @@ class Station:
     def __init__(self, coordinates, fixed=False, identifier=None):
         self.original_coordinates = np.array(coordinates)
         self.coordinates = np.array(coordinates)
+        self.coordinate_variance = 'unknown'
+        self.coordinate_covariance = 'unknown'
+        self.coordinate_std = 'unknown'
+        self.EE_major_axis = 'unknown'
+        self.EE_minor_axis = 'unknown'
+        self.EE_orientation = 'unknown'
+
         self.fixed = fixed
         self.identifier = identifier
 
@@ -118,10 +125,21 @@ class Station:
         self.prior_coordinates.append(self.coordinates)
         self.coordinates = new_coordinates
 
+    def determine_error_ellipse(self):
+        Sn, Se = self.coordinate_variance
+        Sne = self.coordinate_covariance
+
+        self.EE_major_axis = np.sqrt(0.5 * (Sn + Se + np.sqrt((Sn - Se)**2 + 4*(Sne)**2)))
+        self.EE_minor_axis = np.sqrt(0.5 * (Sn + Se - np.sqrt((Sn - Se)**2 + 4*(Sne)**2)))
+        self.EE_orientation = np.degrees(quad_check(Sn - Se, 2 * Sne))
+
 
 class ObservationStation(Station):
     def __init__(self, coordinates, observations, fixed=False, identifier=None, orientation_prior='estimate'):
         super().__init__(coordinates, fixed=fixed, identifier=identifier)
+        self.orientation_variance = 'unknown'
+        self.orientation_std = 'unknown'
+
         self.observations = observations
         if 'direction' in [x.observation_type for x in self.observations]:
             if orientation_prior == 'estimate':

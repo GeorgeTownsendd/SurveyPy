@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.lines import Line2D
+import matplotlib.patches as patches
 
 from AdjustmentNetwork import load_dataset
 from LeastSquaresAdjustment import adjust_network
@@ -93,6 +94,7 @@ def plot_adjustment_process(network, action='show', custom_xaxislimit=False, cus
     elif action == 'return':
         return plt.gcf()
 
+
 def generate_transition_frames(dataset_name, value_start, value_stop, n_steps, value_index, value_type='coordinates_fixed'):
     for step_value in np.linspace(value_start, value_stop, n_steps):
         if value_type == 'coordinates_fixed':
@@ -109,3 +111,40 @@ def generate_transition_frames(dataset_name, value_start, value_stop, n_steps, v
 
         plot = plot_adjustment_process(network, action='return')
         plot.savefig(f'frames/image{step_value}.png')
+
+
+def plot_error_ellipses(network):
+    stations = network.unknown_stations
+    ellipses = [[s.EE_major_axis * 1000, s.EE_minor_axis * 1000, s.EE_orientation] for s in stations]
+    # Convert to mm
+
+    # Find the maximum semi-major axis
+    max_a = max(ellipse[0] for ellipse in ellipses)
+
+    # Calculate grid dimensions
+    grid_size = int(np.ceil(np.sqrt(len(ellipses))))
+    fig, axs = plt.subplots(grid_size, grid_size)
+
+    for i, ax in enumerate(axs.flatten()):
+        if i < len(ellipses):
+            a, b, theta = ellipses[i]
+
+            ellipse = patches.Ellipse((0, 0), 2*a, 2*b, angle=theta, fill=False)
+            ax.add_patch(ellipse)
+            ax.set_aspect('equal')
+
+            ax.set_xlim(-max_a, max_a)
+            ax.set_ylim(-max_a, max_a)
+
+            ax.set_title('Station ' + str(stations[i].identifier))
+
+            # Only label the outer axes
+            if i % grid_size == 0:  # first column
+                ax.set_ylabel('Northing (mm)')
+            if i // grid_size == grid_size - 1:  # last row
+                ax.set_xlabel('Easting (mm)')
+        else:
+            ax.axis('off')  # hide extra subplots
+
+    plt.tight_layout()
+    plt.show()
