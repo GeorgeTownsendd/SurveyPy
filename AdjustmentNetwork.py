@@ -15,6 +15,15 @@ def quad_check(x, y):
         return out + (2 * np.pi)
 
 
+def decdeg2dms(deg):
+    """Convert decimal degrees to degrees, minutes, seconds"""
+    d = int(deg)
+    md = abs(deg - d) * 60
+    m = int(md)
+    sd = (md - m) * 60
+    return d, m, sd
+
+
 class AdjustmentNetwork:
     def __init__(self, stations, observation_order='original'):
         self.adjustment_state = 'original'
@@ -102,8 +111,8 @@ class Station:
         self.coordinate_variance = 'unknown'
         self.coordinate_covariance = 'unknown'
         self.coordinate_std = 'unknown'
-        self.EE_major_axis = 'unknown'
-        self.EE_minor_axis = 'unknown'
+        self.EE_major_semi_axis = 'unknown'
+        self.EE_minor_semi_axis = 'unknown'
         self.EE_orientation = 'unknown'
 
         self.fixed = fixed
@@ -129,9 +138,32 @@ class Station:
         Sn, Se = self.coordinate_variance
         Sne = self.coordinate_covariance
 
-        self.EE_major_axis = np.sqrt(0.5 * (Sn + Se + np.sqrt((Sn - Se)**2 + 4*(Sne)**2)))
-        self.EE_minor_axis = np.sqrt(0.5 * (Sn + Se - np.sqrt((Sn - Se)**2 + 4*(Sne)**2)))
-        self.EE_orientation = np.degrees(quad_check(Sn - Se, 2 * Sne))
+        self.EE_major_semi_axis = np.sqrt(0.5 * (Sn + Se + np.sqrt((Sn - Se) ** 2 + 4 * (Sne ** 2))))
+        self.EE_minor_semi_axis = np.sqrt(0.5 * (Sn + Se - np.sqrt((Sn - Se) ** 2 + 4 * (Sne ** 2))))
+
+        print(Sn, Se)
+
+        top = 2 * Sne#-0.000017122510207663#2 * Sne
+        bottom = Sn-Se#-0.000003252305863673#Sn-Se
+
+        #e = 6.5046117274020825e-06
+        #print('e', e)
+
+        #if self.identifier == 6:
+        #    print('Sn, Se', (Sn, Se))
+        #    print('True: ', -0.000003252305863673)
+        #    print('Calc: ', Sn-Se)
+        #    print('Err:', e)
+            #print(top, bottom)
+            #print(f'Error: {(2 * Sne) - -0.000017122510207663}, {(Sn - Se) - -0.000003252305863673}')
+            #print(Sn, Se, Sn-Se)
+
+        #bottom -= 0
+
+        self.EE_orientation = ((np.degrees(np.arctan2(top,bottom)))%360)/2#np.degrees(quad_check(Sn - Se, 2 * Sne))
+        print(self.EE_orientation)
+        x = np.degrees(np.arctan2(2 * Sne, Sn - Se + np.sqrt((Sn - Se)**2 + 4 * (Sne**2)))) % 360
+        print(x)
 
 
 class ObservationStation(Station):
@@ -161,7 +193,7 @@ class ObservationStation(Station):
         self.orientation = dir_obs.observation_value - bearing_ij
 
 
-def load_dataset(dataset_name, return_type='network'):
+def load_dataset(dataset_name, return_type='network', adjust_station=False):
     station_input_file = f'network_inputs/{dataset_name}/station_input.csv'
     observation_input_file = f'network_inputs/{dataset_name}/observation_input.csv'
 
@@ -198,6 +230,15 @@ def load_dataset(dataset_name, return_type='network'):
         easting = row['easting']
         northing = row['northing']
         fixed = row['fixed']
+
+        if isinstance(adjust_station, list) or isinstance(adjust_station, tuple):
+            print(f'Adjusting {point} by {adjust_station[1]}dx {adjust_station[2]}dy')
+            print('adjusting', easting, northing)
+            if str(point) == str(adjust_station[0]):
+                easting += adjust_station[1]
+                northing += adjust_station[2]
+
+
         coordinates = np.array([easting, northing])
 
         # Create ObservationStation instances for occupied stations

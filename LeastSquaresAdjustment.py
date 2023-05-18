@@ -167,7 +167,7 @@ def compute_observation_vector(observations):
     return L
 
 
-def adjust_network(network, max_iterations=1):
+def adjust_network(network, max_iterations=1, return_type='number_iterations'):
     network.adjustment_state = 'in_progress'
     P = network.P
     p = np.array([obs.observation_value for obs in network.observations])
@@ -205,7 +205,7 @@ def adjust_network(network, max_iterations=1):
         vhat[network.n_distance_obs:] /= RHO
         variance = vhat.T @ P @ vhat / 2
 
-        print(f'var: {variance} (i={iterations})')
+        #print(f'var: {variance} (i={iterations})')
 
         if np.max(np.abs(Delta[:network.n_unknown_coordinates])) < 10 ** -3:
             converged = True
@@ -217,6 +217,63 @@ def adjust_network(network, max_iterations=1):
                 network.adjustment_state = 'adjusted_exploded'
             break
 
-    print(network.adjustment_state)
-    return A, L, vhat
+    network.final_adjustment_state = {
+        'A': A,
+        'L': L,
+        'P': P,
+        'N': N,
+        'V': vhat
+    }
 
+    print(network.adjustment_state)
+    if return_type == 'final_matrices':
+        return A, L, vhat
+    elif return_type == 'n_iterations':
+        if network.adjustment_state == 'adjusted_converged':
+            return iterations
+        else:
+            return 'not_converged'
+    elif return_type == 'adjustment_state':
+        return network.adjustment_state
+
+
+def determine_adjusted_distance_and_bearing(network, p1, p2):
+    N = network.final_adjustment_state['N']
+    p1 = [p for p in network.unknown_stations if str(p.identifier) == str(p1)][0]
+    p1_i = network.unknown_station_names.index(p1.identifier) * 2
+    p2 = [p for p in network.unknown_stations if str(p.identifier) == str(p2)][0]
+    p2_i = network.unknown_station_names.index(p2.identifier) * 2
+
+    dx = p2.coordinates[0] - p1.coordinates[0]
+    dy = p2.coordinates[1] - p1.coordinates[1]
+
+    bearing_ij = quad_check(dx, dy)
+    distance_ij = np.sqrt(dx ** 2 + dy ** 2)
+
+    Ex = np.zeros((4, 4))
+
+    # Fill the matrix
+    Ex[0:2, 0:2] = N[p1_i:p1_i + 2, p1_i:p1_i + 2]
+    Ex[2:4, 2:4] = N[p2_i:p2_i + 2, p2_i:p2_i + 2]
+
+    # Fill the off-diagonal blocks
+    Ex[0:2, 2:4] = N[p1_i:p1_i + 2, p2_i:p2_i + 2]
+    Ex[2:4, 0:2] = N[p2_i:p2_i + 2, p1_i:p1_i + 2]
+
+    J = np.zeros((2, 4))
+
+    J[0,0] = -dx / distance_ij
+    J[0,1] = -dy / distance_ij
+    J[0,2] = dx / distance_ij
+    J[0,3] = dy / distance_ij
+    J[1,0] = -dy / (distance_ij**2)
+    J[1,1] = dx / (distance_ij**2)
+    J[1,2] = dy / (distance_ij**2)
+    J[1,3] = -dx / (distance_ij**2)
+
+    Ey = J @ Ex @ J.T
+
+    distance_std = np.sqrt(Ey[0,0]) * 1000 #mm
+    bearing_std = np.sqrt(Ey[1,1]) # seconds
+
+    return distance_std, bearing_std

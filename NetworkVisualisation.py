@@ -4,8 +4,9 @@ import matplotlib.cm as cm
 from matplotlib.lines import Line2D
 import matplotlib.patches as patches
 
-from AdjustmentNetwork import load_dataset
+from AdjustmentNetwork import load_dataset, decdeg2dms
 from LeastSquaresAdjustment import adjust_network
+
 
 def plot_adjustment_process(network, action='show', custom_xaxislimit=False, custom_yaxislimit=False):
     plt.figure(figsize=(8, 8))
@@ -115,7 +116,7 @@ def generate_transition_frames(dataset_name, value_start, value_stop, n_steps, v
 
 def plot_error_ellipses(network):
     stations = network.unknown_stations
-    ellipses = [[s.EE_major_axis * 1000, s.EE_minor_axis * 1000, s.EE_orientation] for s in stations]
+    ellipses = [[s.EE_major_semi_axis * 1000, s.EE_minor_semi_axis * 1000, s.EE_orientation] for s in stations]
     # Convert to mm
 
     # Find the maximum semi-major axis
@@ -129,7 +130,7 @@ def plot_error_ellipses(network):
         if i < len(ellipses):
             a, b, theta = ellipses[i]
 
-            ellipse = patches.Ellipse((0, 0), 2*a, 2*b, angle=theta, fill=False)
+            ellipse = patches.Ellipse((0, 0), 2*a, 2*b, angle=90-theta, fill=False) #theta-90 to convert from postive x axis to positive y axis angle measurement
             ax.add_patch(ellipse)
             ax.set_aspect('equal')
 
@@ -145,6 +146,43 @@ def plot_error_ellipses(network):
                 ax.set_xlabel('Easting (mm)')
         else:
             ax.axis('off')  # hide extra subplots
+
+    plt.tight_layout()
+    plt.show()
+
+
+def visualize_adjustments(dataset_name, station_names, side_length=100, coord_range=100, max_iterations=10):
+    if isinstance(coord_range, tuple):
+        dx_list = np.linspace(coord_range[0][0], coord_range[0][1], side_length)
+        dy_list = np.linspace(coord_range[1][0], coord_range[1][1], side_length)
+    else:
+        dx_list = np.linspace(-coord_range, coord_range, side_length)
+        dy_list = np.linspace(-coord_range, coord_range, side_length)
+
+    grid_size = int(np.ceil(np.sqrt(len(station_names))))
+    fig, axs = plt.subplots(grid_size, grid_size)
+
+    for i, ax in enumerate(axs.flatten()):
+        if i < len(station_names):
+            station = station_names[i]
+            grid = np.zeros((side_length, side_length))
+
+            for x, dx in enumerate(dx_list):
+                for y, dy in enumerate(dy_list):
+                    network = load_dataset(dataset_name=dataset_name, adjust_station=(station, dx, dy))
+                    iterations = adjust_network(network, max_iterations=max_iterations, return_type='n_iterations')
+                    if iterations == 'not_converged':
+                        iterations = -1
+                    grid[x, y] = iterations
+
+            ax.imshow(grid, extent=[dx_list[0], dx_list[-1], dy_list[0], dy_list[-1]])
+            ax.set_title(f'Station {station}')
+            if i % grid_size == 0:
+                ax.set_ylabel('Y (m)')
+            if i // grid_size == grid_size - 1:
+                ax.set_xlabel('X (m)')
+        else:
+            ax.axis('off')
 
     plt.tight_layout()
     plt.show()
