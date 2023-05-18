@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from scipy.stats.distributions import chi2
 
 RHO = 206264.8
 
@@ -35,6 +36,7 @@ class AdjustmentNetwork:
         elif observation_order == 'original':
             self.observations = sorted(self.observations, key = lambda x:x.observation_n)
 
+
         self.n_distance_obs = sum([1 for x in self.observations if x.observation_type == 'distance'])
         self.n_azimuth_obs = sum([1 for x in self.observations if x.observation_type == 'azimuth'])
         self.n_direction_obs = sum([1 for x in self.observations if x.observation_type == 'direction'])
@@ -60,6 +62,9 @@ class AdjustmentNetwork:
         sigma = 1
         self.P = np.linalg.inv(sigma * np.diag([obs.stddev ** 2 for obs in self.observations]))
         self.L = np.array([obs.observation_value for obs in self.observations])
+
+        self.redundant_observations = len(self.observations) - (len(self.unknown_stations) * 2) - len(self.directed_stations)
+        self.final_adjustment_state = 'unadjusted_network'
 
     def sort_observations_by_type(self):
         new_observations = []
@@ -108,6 +113,16 @@ class AdjustmentNetwork:
         bearing_std = np.sqrt(Ey[1, 1])  # seconds
 
         return distance_std, bearing_std
+
+    def perform_global_model_test(self, confidence_level=0.99):
+        threshold = chi2.ppf(confidence_level, df=self.redundant_observations)
+
+        V = self.final_adjustment_state['V']
+        G = self.final_adjustment_state['P']
+
+        value = V.T @ G @ V
+
+        print(value, threshold, f'Test Passed for a={confidence_level}: {str(value < threshold)}')
 
 
     def __repr__(self):
