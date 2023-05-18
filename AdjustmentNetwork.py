@@ -68,6 +68,48 @@ class AdjustmentNetwork:
 
         self.observations = new_observations
 
+    def determine_adjusted_distance_and_bearing(self, p1, p2):
+        N = self.final_adjustment_state['N']
+        p1 = [p for p in self.unknown_stations if str(p.identifier) == str(p1)][0]
+        p1_i = self.unknown_station_names.index(p1.identifier) * 2
+        p2 = [p for p in self.unknown_stations if str(p.identifier) == str(p2)][0]
+        p2_i = self.unknown_station_names.index(p2.identifier) * 2
+
+        dx = p2.coordinates[0] - p1.coordinates[0]
+        dy = p2.coordinates[1] - p1.coordinates[1]
+
+        bearing_ij = quad_check(dx, dy)
+        distance_ij = np.sqrt(dx ** 2 + dy ** 2)
+
+        Ex = np.zeros((4, 4))
+
+        # Fill the matrix
+        Ex[0:2, 0:2] = N[p1_i:p1_i + 2, p1_i:p1_i + 2]
+        Ex[2:4, 2:4] = N[p2_i:p2_i + 2, p2_i:p2_i + 2]
+
+        # Fill the off-diagonal blocks
+        Ex[0:2, 2:4] = N[p1_i:p1_i + 2, p2_i:p2_i + 2]
+        Ex[2:4, 0:2] = N[p2_i:p2_i + 2, p1_i:p1_i + 2]
+
+        J = np.zeros((2, 4))
+
+        J[0, 0] = -dx / distance_ij
+        J[0, 1] = -dy / distance_ij
+        J[0, 2] = dx / distance_ij
+        J[0, 3] = dy / distance_ij
+        J[1, 0] = -dy / (distance_ij ** 2)
+        J[1, 1] = dx / (distance_ij ** 2)
+        J[1, 2] = dy / (distance_ij ** 2)
+        J[1, 3] = -dx / (distance_ij ** 2)
+
+        Ey = J @ Ex @ J.T
+
+        distance_std = np.sqrt(Ey[0, 0]) * 1000  # mm
+        bearing_std = np.sqrt(Ey[1, 1])  # seconds
+
+        return distance_std, bearing_std
+
+
     def __repr__(self):
         return f"AdjustmentNetwork(stations:{','.join([st.identifier for st in self.stations])})"
 
