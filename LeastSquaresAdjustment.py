@@ -192,9 +192,9 @@ def adjust_network(network, max_iterations=1, return_type='number_iterations'):
         up = Delta[:network.n_unknown_coordinates].reshape((network.n_unknown_stations, 2))
         for n, data  in enumerate(zip(up, network.unknown_stations)):
             shift, station = data
-
             new_station_coordinates = station.coordinates + shift
             station.update_coordinates(new_station_coordinates)
+
             station.coordinate_variance = np.array([N[(n*2), (n*2)], N[(n*2)+1, (n*2)+1]])
             station.coordinate_covariance = N[(n*2)+1, (n*2)]
             station.coordinate_std = np.sqrt(station.coordinate_variance)

@@ -112,7 +112,8 @@ class AdjustmentNetwork:
         distance_std = np.sqrt(Ey[0, 0]) * 1000  # mm
         bearing_std = np.sqrt(Ey[1, 1])  # seconds
 
-        return distance_std, bearing_std
+        return {'value': (distance_ij, bearing_ij),
+                'std': (distance_std, bearing_std)}
 
     def perform_global_model_test(self, confidence_level=0.99):
         threshold = chi2.ppf(confidence_level, df=self.redundant_observations)
@@ -173,7 +174,7 @@ class Station:
         self.EE_orientation = 'unknown'
 
         self.fixed = fixed
-        self.identifier = identifier
+        self.identifier = str(identifier)
 
         self.prior_coordinates = []
         self.prior_adjustments = []
@@ -198,29 +199,21 @@ class Station:
         self.EE_major_semi_axis = np.sqrt(0.5 * (Sn + Se + np.sqrt((Sn - Se) ** 2 + 4 * (Sne ** 2))))
         self.EE_minor_semi_axis = np.sqrt(0.5 * (Sn + Se - np.sqrt((Sn - Se) ** 2 + 4 * (Sne ** 2))))
 
-        print(Sn, Se)
+        excel_top = 2 * Sne#-0.000017122510207663#2 * Sne
+        excel_bottom = Sn-Se#-0.000003252305863673#Sn-Se
 
-        top = 2 * Sne#-0.000017122510207663#2 * Sne
-        bottom = Sn-Se#-0.000003252305863673#Sn-Se
+        excel_bottom, excel_top = excel_top, excel_bottom
 
-        #e = 6.5046117274020825e-06
-        #print('e', e)
 
-        #if self.identifier == 6:
-        #    print('Sn, Se', (Sn, Se))
-        #    print('True: ', -0.000003252305863673)
-        #    print('Calc: ', Sn-Se)
-        #    print('Err:', e)
-            #print(top, bottom)
-            #print(f'Error: {(2 * Sne) - -0.000017122510207663}, {(Sn - Se) - -0.000003252305863673}')
-            #print(Sn, Se, Sn-Se)
+        angle = np.arctan2(excel_bottom, excel_top)
+        if angle < np.pi:
+            angle += np.pi
+            angle = -angle
 
-        #bottom -= 0
+        #if self.identifier == '2':
+        #    print(self.identifier, f'atan2({excel_bottom, excel_top}) = {np.arctan2(excel_bottom, excel_top)}')
 
-        self.EE_orientation = ((np.degrees(np.arctan2(top,bottom)))%360)/2#np.degrees(quad_check(Sn - Se, 2 * Sne))
-        print(self.EE_orientation)
-        x = np.degrees(np.arctan2(2 * Sne, Sn - Se + np.sqrt((Sn - Se)**2 + 4 * (Sne**2)))) % 360
-        print(x)
+        self.EE_orientation = (np.degrees(angle) % 360) / 2.0
 
 
 class ObservationStation(Station):
