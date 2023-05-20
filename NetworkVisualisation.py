@@ -4,7 +4,7 @@ import matplotlib.cm as cm
 from matplotlib.lines import Line2D
 import matplotlib.patches as patches
 
-from AdjustmentNetwork import load_dataset, decdeg2dms
+from AdjustmentNetwork import *
 from LeastSquaresAdjustment import adjust_network
 
 
@@ -183,6 +183,121 @@ def visualize_adjustments(dataset_name, station_names, side_length=100, coord_ra
                 ax.set_xlabel('X (m)')
         else:
             ax.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+
+def visualize_network(network, show_error_ellipse=True):
+    """
+    Visualize a network of stations. Stations are represented as either circles or squares,
+    while different line styles represent different types of measurements between them.
+
+    Parameters:
+    network: The network of stations to visualize.
+    show_error_ellipse: Whether to show the error ellipse for each station. Defaults to True.
+    """
+    all_stations = network.unknown_stations + network.fixed_stations
+
+    # Calculate the ranges of your data in x and y
+    x_range = max(st.coordinates[0] for st in all_stations) - min(st.coordinates[0] for st in all_stations)
+    y_range = max(st.coordinates[1] for st in all_stations) - min(st.coordinates[1] for st in all_stations)
+
+    # Calculate the aspect ratio of your data and set the figure size accordingly
+    data_aspect_ratio = x_range / y_range
+    fig_height = 6  # height in inches, fixed as per your requirements
+    fig_width = fig_height * data_aspect_ratio  # adjust the width according to the data aspect ratio
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+    # Create dictionaries to store station legend elements and their colors
+    station_legend_elements = []
+    color_dict = {}
+
+    # Plot stations and create station legend elements
+    for station, marker in zip([network.fixed_stations, network.unknown_stations], ['s', 'o']):
+        for st in station:
+            plot, = ax.plot(*st.coordinates, marker, markersize=10, zorder=5)
+            color_dict[st.identifier] = plot.get_color()
+            station_legend_elements.append(
+                Line2D([0], [0], linestyle='', marker=marker, color=color_dict[st.identifier],
+                       markerfacecolor=color_dict[st.identifier], markersize=10, label=st.identifier))
+
+    # Create an invisible point to ensure enough space for legends
+    min_x, max_x = min(st.coordinates[0] for st in all_stations), max(st.coordinates[0] for st in all_stations)
+    avg_y = np.mean([st.coordinates[1] for st in all_stations])
+    ax.plot(max_x + 0.25 * (max_x - min_x), avg_y, alpha=0)
+
+    # Store observations between stations
+    observation_dict = {}  # {(station1, station2): [observation_type1, observation_type2, ...]}
+    for obs in network.observations:
+        if isinstance(obs, SingleTargetObservation):
+            key = tuple(sorted([obs.st_obs.identifier, obs.st_tar.identifier]))
+            observation_dict.setdefault(key, []).append(obs.observation_type)
+        elif isinstance(obs, MultiTargetObservation):
+            key1 = tuple(sorted([obs.st_obs.identifier, obs.st_tar1.identifier]))
+            key2 = tuple(sorted([obs.st_obs.identifier, obs.st_tar2.identifier]))
+            observation_dict.setdefault(key1, []).append(obs.observation_type)
+            observation_dict.setdefault(key2, []).append(obs.observation_type)
+
+    for (station1_id, station2_id), observation_types in observation_dict.items():
+        station1 = next(station for station in all_stations if station.identifier == station1_id)
+        station2 = next(station for station in all_stations if station.identifier == station2_id)
+
+        # If both distance and direction are present, plot a dashed red arrow
+        if 'distance' in observation_types and 'direction' in observation_types:
+            line_style = 'dashed'
+            line_color = 'red'
+            ax.annotate("", xy=station1.coordinates, xytext=station2.coordinates,
+                        arrowprops=dict(arrowstyle="-|>", mutation_scale=30, fc=line_color, color=line_color, lw=1.5,
+                                        linestyle=line_style))
+        # Else plot the measurements separately
+        else:
+            # Plot distance
+            if 'distance' in observation_types:
+                line_style = 'dotted'
+                line_color = 'grey'
+                ax.annotate("", xy=station1.coordinates, xytext=station2.coordinates,
+                            arrowprops=dict(arrowstyle="-", mutation_scale=30, fc=line_color, color=line_color, lw=1.5,
+                                            linestyle=line_style, connectionstyle="arc3,rad=0.15"))
+            # Plot direction
+            if 'direction' in observation_types:
+                line_style = 'solid'
+                line_color = 'red'
+                ax.annotate("", xy=station1.coordinates, xytext=station2.coordinates,
+                            arrowprops=dict(arrowstyle="-|>", mutation_scale=30, fc=line_color, color=line_color,
+                                            lw=1.5, linestyle=line_style))
+        # Plot azimuth
+        if 'azimuth' in observation_types:
+            line_style = 'solid'
+            line_color = 'blue'
+            ax.annotate("", xy=station1.coordinates, xytext=station2.coordinates,
+                        arrowprops=dict(arrowstyle="-|>", mutation_scale=30, fc=line_color, color=line_color, lw=1.5,
+                                        linestyle=line_style))
+
+    # Plot error ellipses at stations
+    if show_error_ellipse:
+        for station in network.unknown_stations:
+            a, b = station.EE_major_semi_axis * 1000, station.EE_minor_semi_axis * 1000  # Convert to mm
+            theta = station.EE_orientation
+            ellipse = patches.Ellipse(station.coordinates, 2 * a, 2 * b, angle=90 - theta, fill=False, zorder=5)
+            ax.add_patch(ellipse)
+
+    # Set figure properties and show legends
+    ax.set_aspect('equal')
+    ax.set_xlabel('Easting (m)')
+    ax.set_ylabel('Northing (m)')
+    plt.title(f'Network Visualization')
+
+    # Create and add legends to the figure
+    station_type_legend_elements = [
+        Line2D([0], [0], linestyle='', marker=marker, color='black', markerfacecolor='black',
+               markersize=10, label=label) for marker, label in zip(['s', 'o'], ['Fixed', 'Unknown'])]
+    line_legend_elements = [Line2D([0], [0], color=color, linestyle=style, label=label) for color, style, label in
+                            zip(['grey', 'red', 'red', 'blue'], ['dotted', 'solid', 'dashed', 'solid'], ['Dist', 'Dir', 'Dir+Dist', 'Azm'])]
+
+    ax.add_artist(ax.legend(handles=station_type_legend_elements, loc='upper right', bbox_to_anchor=[1, 1]))
+    ax.add_artist(ax.legend(handles=line_legend_elements, loc='upper right', bbox_to_anchor=[1, 0.8925]))
+    ax.add_artist(ax.legend(handles=station_legend_elements, loc='upper right', bbox_to_anchor=[1, 0.7],title='Station Name'))
 
     plt.tight_layout()
     plt.show()

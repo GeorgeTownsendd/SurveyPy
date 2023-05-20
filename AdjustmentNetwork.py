@@ -74,10 +74,13 @@ class AdjustmentNetwork:
         self.observations = new_observations
 
     def determine_adjusted_distance_and_bearing(self, p1, p2):
+        if p1.fixed or p2.fixed:
+            print('Error: fixed stations')
+
         N = self.final_adjustment_state['N']
-        p1 = [p for p in self.unknown_stations if str(p.identifier) == str(p1)][0]
+        p1 = [p for p in self.unknown_stations if str(p.identifier) == str(p1.identifier)][0]
         p1_i = self.unknown_station_names.index(p1.identifier) * 2
-        p2 = [p for p in self.unknown_stations if str(p.identifier) == str(p2)][0]
+        p2 = [p for p in self.unknown_stations if str(p.identifier) == str(p2.identifier)][0]
         p2_i = self.unknown_station_names.index(p2.identifier) * 2
 
         dx = p2.coordinates[0] - p1.coordinates[0]
@@ -119,11 +122,16 @@ class AdjustmentNetwork:
         threshold = chi2.ppf(confidence_level, df=self.redundant_observations)
 
         V = self.final_adjustment_state['V']
-        G = self.final_adjustment_state['P']
+        G = np.linalg.inv(self.final_adjustment_state['P'])
 
         value = V.T @ G @ V
 
-        print(value, threshold, f'Test Passed for a={confidence_level}: {str(value < threshold)}')
+        test_passed = value < threshold
+        test_passed_string = 'Test passed' if test_passed else 'Test failed'
+
+        print(f'{test_passed_string} for a={confidence_level}')
+        print('Chi2 Threshold: ' + str(threshold))
+        print('(V^T)GT: ' + str(value))
 
 
     def __repr__(self):
@@ -157,6 +165,7 @@ class MultiTargetObservation(Observation):
         self.st_tar1 = target_station1
         self.st_tar2 = target_station2
         self.involved_stations = [self.st_obs, self.st_tar1, self.st_tar2]
+        print('Involved stations: ', self.involved_stations)
 
         self.observation_value = observation_value
         self.observation_type = observation_type
@@ -199,19 +208,15 @@ class Station:
         self.EE_major_semi_axis = np.sqrt(0.5 * (Sn + Se + np.sqrt((Sn - Se) ** 2 + 4 * (Sne ** 2))))
         self.EE_minor_semi_axis = np.sqrt(0.5 * (Sn + Se - np.sqrt((Sn - Se) ** 2 + 4 * (Sne ** 2))))
 
-        excel_top = 2 * Sne#-0.000017122510207663#2 * Sne
-        excel_bottom = Sn-Se#-0.000003252305863673#Sn-Se
+        excel_top = 2 * Sne
+        excel_bottom = Sn-Se
 
         excel_bottom, excel_top = excel_top, excel_bottom
-
 
         angle = np.arctan2(excel_bottom, excel_top)
         if angle < np.pi:
             angle += np.pi
             angle = -angle
-
-        #if self.identifier == '2':
-        #    print(self.identifier, f'atan2({excel_bottom, excel_top}) = {np.arctan2(excel_bottom, excel_top)}')
 
         self.EE_orientation = (np.degrees(angle) % 360) / 2.0
 

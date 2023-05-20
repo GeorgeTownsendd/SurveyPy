@@ -225,7 +225,9 @@ def adjust_network(network, max_iterations=1, return_type='number_iterations'):
         'V': vhat
     }
 
-    print(network.adjustment_state)
+    print(network.adjustment_state, f' - {iterations} iterations')
+    network.perform_global_model_test()
+
     if return_type == 'final_matrices':
         return A, L, vhat
     elif return_type == 'n_iterations':
