@@ -35,7 +35,7 @@ class AdjustmentNetwork:
             self.sort_observations_by_type()
         elif observation_order == 'original':
             self.observations = sorted(self.observations, key = lambda x:x.observation_n)
-
+        self.angular_observation_mask = [False if obs.observation_type == 'distance' else True for obs in self.observations]
 
         self.n_distance_obs = sum([1 for x in self.observations if x.observation_type == 'distance'])
         self.n_azimuth_obs = sum([1 for x in self.observations if x.observation_type == 'azimuth'])
@@ -122,16 +122,17 @@ class AdjustmentNetwork:
         threshold = chi2.ppf(confidence_level, df=self.redundant_observations)
 
         V = self.final_adjustment_state['V']
-        G = np.linalg.inv(self.final_adjustment_state['P'])
+        Ginv = np.linalg.inv(self.final_adjustment_state['G'])
 
-        value = V.T @ G @ V
+        value = (V.T @ Ginv @ V) / self.redundant_observations
 
         test_passed = value < threshold
         test_passed_string = 'Test passed' if test_passed else 'Test failed'
 
+        print('Estimated Variance Factor (VF): ' + str(round(value, 3)))
+        print('Chi2 Threshold: ' + str(round(threshold, 3)))
         print(f'{test_passed_string} for a={confidence_level}')
-        print('Chi2 Threshold: ' + str(threshold))
-        print('(V^T)GT: ' + str(value))
+
 
 
     def __repr__(self):

@@ -13,18 +13,17 @@ dataset_list = [
     'SURV3350_Assignment1', # Working!
     'SURV3350_A1_integerestimate', # Working
 ]
-dataset_name = dataset_list[0]
+dataset_name = dataset_list[2]
 
 
 #visualize_adjustments(dataset_name, [2, 4, 5, 6], side_length=10, coord_range=((0, 10), (0, 10)), max_iterations=100)
 #generate_transition_frames(dataset_name, 0.25, 10, 40, 7, value_type='weight')
 
 network = load_dataset(dataset_name=dataset_name)
-A, L, vhat = adjust_network(network, max_iterations=10, return_type='final_matrices')
+adjust_network(network, max_iterations=5)
 
 #plot_adjustment_process(network)
-#plot_error_ellipses(network)
-
+#plot_error_ellipses(network, 0.99)
 visualize_network(network)
 
 '''

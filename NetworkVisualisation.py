@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.lines import Line2D
 import matplotlib.patches as patches
+from scipy.stats import chi2
 
 from AdjustmentNetwork import *
 from LeastSquaresAdjustment import adjust_network
@@ -114,9 +115,14 @@ def generate_transition_frames(dataset_name, value_start, value_stop, n_steps, v
         plot.savefig(f'frames/image{step_value}.png')
 
 
-def plot_error_ellipses(network):
+def plot_error_ellipses(network, confidence_level='default'):
+    if confidence_level == 'default':
+        c = 1
+    else:
+        c = chi2.ppf(confidence_level, df=2)
+
     stations = network.unknown_stations
-    ellipses = [[s.EE_major_semi_axis * 1000, s.EE_minor_semi_axis * 1000, s.EE_orientation] for s in stations]
+    ellipses = [[s.EE_major_semi_axis * 1000 * np.sqrt(c), s.EE_minor_semi_axis * 1000 * np.sqrt(c), s.EE_orientation] for s in stations]
     # Convert to mm
 
     # Find the maximum semi-major axis
@@ -129,8 +135,7 @@ def plot_error_ellipses(network):
     for i, ax in enumerate(axs.flatten()):
         if i < len(ellipses):
             a, b, theta = ellipses[i]
-
-            ellipse = patches.Ellipse((0, 0), 2*a, 2*b, angle=90-theta, fill=False) #theta-90 to convert from postive x axis to positive y axis angle measurement
+            ellipse = patches.Ellipse((0, 0), 2 * a, 2 * b, angle=90 - theta, fill=False)
             ax.add_patch(ellipse)
             ax.set_aspect('equal')
 
@@ -139,14 +144,23 @@ def plot_error_ellipses(network):
 
             ax.set_title('Station ' + str(stations[i].identifier))
 
-            # Only label the outer axes
             if i % grid_size == 0:  # first column
-                ax.set_ylabel('Northing (mm)')
+                ax.set_ylabel('\nNorthing (mm)')
             if i // grid_size == grid_size - 1:  # last row
-                ax.set_xlabel('Easting (mm)')
-        else:
-            ax.axis('off')  # hide extra subplots
+                ax.set_xlabel('\nEasting (mm)')
 
+            annotation_text = f"a={a:.2f}, b={b:.2f}, $θ={theta:.2f}^\circ$"
+            ax.annotate(annotation_text, xy=(0, 0), xycoords='axes fraction', textcoords='offset points',
+                        xytext=(-20, -30), ha='left')
+
+        else:
+            ax.axis('off')
+
+    if isinstance(confidence_level, str):
+        confidence_level = confidence_level[0].upper() + confidence_level[1:]
+        plt.suptitle(f'{confidence_level} Error Ellipses')
+    else:
+        plt.suptitle(f'{int(confidence_level*100)}% Confidence Error Ellipses')
     plt.tight_layout()
     plt.show()
 
@@ -276,8 +290,9 @@ def visualize_network(network, show_error_ellipse=True):
 
     # Plot error ellipses at stations
     if show_error_ellipse:
+        ellipse_scale_factor = 1000#ax.get_xlim()[1] - ax.get_xlim()[0] / 100 \\TODO SCALE ELLIPSES RIGHT
         for station in network.unknown_stations:
-            a, b = station.EE_major_semi_axis * 1000, station.EE_minor_semi_axis * 1000  # Convert to mm
+            a, b = station.EE_major_semi_axis * ellipse_scale_factor, station.EE_minor_semi_axis * ellipse_scale_factor  # Convert to mm
             theta = station.EE_orientation
             ellipse = patches.Ellipse(station.coordinates, 2 * a, 2 * b, angle=90 - theta, fill=False, zorder=5)
             ax.add_patch(ellipse)

@@ -167,10 +167,9 @@ def compute_observation_vector(observations):
     return L
 
 
-def adjust_network(network, max_iterations=1, return_type='number_iterations'):
+def adjust_network(network, max_iterations=1, return_type='adjustment_state'):
     network.adjustment_state = 'in_progress'
-    P = network.P
-    p = np.array([obs.observation_value for obs in network.observations])
+    G = network.P
 
     converged = False
     iterations = 0
@@ -179,9 +178,10 @@ def adjust_network(network, max_iterations=1, return_type='number_iterations'):
         A = compute_design_matrix(network)
         L = compute_observation_vector(network.observations)
 
-        N = np.linalg.inv(A.T @ P @ A)
-        Delta = -N @ A.T @ P @ L
+        N = np.linalg.inv(A.T @ G @ A)
+        Delta = -N @ A.T @ G @ L
 
+        # Update Station Orientations
         for n, data  in enumerate(zip(network.directed_stations, Delta[network.n_unknown_coordinates:])):
             station, orientation_update = data
 
@@ -189,6 +189,7 @@ def adjust_network(network, max_iterations=1, return_type='number_iterations'):
             station.orientation_variance = N[network.n_unknown_stations+n, network.n_unknown_stations+n] / RHO
             station.orientation_std = np.sqrt(station.orientation_variance)
 
+        # Update station coordinates and calculate the parameters of their error ellipse
         up = Delta[:network.n_unknown_coordinates].reshape((network.n_unknown_stations, 2))
         for n, data  in enumerate(zip(up, network.unknown_stations)):
             shift, station = data
@@ -200,12 +201,7 @@ def adjust_network(network, max_iterations=1, return_type='number_iterations'):
             station.coordinate_std = np.sqrt(station.coordinate_variance)
             station.determine_error_ellipse()
 
-
-        vhat = A @ Delta + L
-        vhat[network.n_distance_obs:] /= RHO
-        variance = vhat.T @ P @ vhat / 2
-
-        #print(f'var: {variance} (i={iterations})')
+        V = A @ Delta + L
 
         if np.max(np.abs(Delta[:network.n_unknown_coordinates])) < 10 ** -3:
             converged = True
@@ -220,16 +216,16 @@ def adjust_network(network, max_iterations=1, return_type='number_iterations'):
     network.final_adjustment_state = {
         'A': A,
         'L': L,
-        'P': P,
+        'G': G,
         'N': N,
-        'V': vhat
+        'V': V
     }
 
     print(network.adjustment_state, f' - {iterations} iterations')
     network.perform_global_model_test()
 
     if return_type == 'final_matrices':
-        return A, L, vhat
+        return A, L, V
     elif return_type == 'n_iterations':
         if network.adjustment_state == 'adjusted_converged':
             return iterations
